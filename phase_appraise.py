@@ -147,16 +147,26 @@ def plot_full(classification_data, args, fig_name=None, phasesets=None, title=No
         unclassified.append(unk)
         total_classified.append(cis + trans + unc)
         total_reads.append(total)
-        correct_ratio.append(None if cis + trans == 0 else 100*abs(max(cis,trans)/(cis + trans)))
+        correct_ratio = None if cis + trans == 0 else 100*abs(max(cis,trans)/(cis + trans))
+        correct_ratio.append(correct_ratio)
 
         val = IN_CIS if cis > trans else IN_TRANS if trans > cis else None
-        if val is None: continue
-        if prev_val is None:
+        switch = False
+        if val is not None:
+            if prev_val is not None and val != prev_val:
+                switches.append(i)
+                switch = True
             prev_val = val
-            continue
-        if prev_val is not None and val != prev_val:
-            switches.append(i)
-        prev_val = val
+
+        #TODO
+        # write output file, I think bed format is good
+        contig = "unknown" if region is None else region.split("-")[0]
+        start = i * args.spacing
+        end = start + args.spacing
+        record = [contig, start, end, cis, trans, unk, unc, 0 if correct_ratio is None else correct_ratio, switch]
+        # I'm not sure if this will work but I think it's a good start
+        # write record to some global output file initialized like the log file
+        # there should probably be an argument to control whether this is written.. I suppose not writing by default is best?
 
     # get averages
     avg_unknown = np.mean(list(map(lambda y: y[1], filter(lambda x: x[0] != 0, zip(total_reads, unknown)))))
