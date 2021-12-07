@@ -9,7 +9,7 @@ import collections
 import numpy as np
 import os
 
-OUTPUT_FILE_NAME = None
+OUTPUT_LOG_FILE_NAME = None
 
 HP_TAG = "HP"
 UNCLASSIFIED = 'u'
@@ -25,6 +25,8 @@ def parse_args(args = None):
                        help='Truth Hap1 readset')
     parser.add_argument('--truth_hap2', '-2', dest='truth_hap2', default=None, required=True, type=str,
                        help='Truth Hap2 readset')
+    parser.add_argument('--region', '-r', dest='region', default=None, required=False, type=str,
+                       help='Region to run on')
     parser.add_argument('--phaseset_bed', '-p', dest='phaseset_bed', default=None, required=False, type=str,
                        help='File describing phase sets')
     parser.add_argument('--high_conf_bed', '-C', dest='high_conf_bed', default=None, required=False, type=str,
@@ -47,9 +49,9 @@ def parse_args(args = None):
 
 def log(msg):
     print(msg, file=sys.stderr)
-    global OUTPUT_FILE_NAME
-    if OUTPUT_FILE_NAME is not None:
-        with open(OUTPUT_FILE_NAME, 'a') as out:
+    global OUTPUT_LOG_FILE_NAME
+    if OUTPUT_LOG_FILE_NAME is not None:
+        with open(OUTPUT_LOG_FILE_NAME, 'a') as out:
             print(msg, file=out)
 
 
@@ -112,7 +114,7 @@ def plot_only_natural_switch(classification_data, args, phasesets=None, fig_name
 
 
 
-def plot_full(classification_data, args, fig_name=None, phasesets=None, title=None, highconf_positions=None):
+def plot_full(classification_data, args, fig_name=None, phasesets=None, title=None, highconf_positions=None, region=None):
 
     start_idx = min(classification_data.keys())
     end_idx = max(classification_data.keys())
@@ -141,7 +143,7 @@ def plot_full(classification_data, args, fig_name=None, phasesets=None, title=No
 
         in_cis.append(cis)
         in_trans.append(-1 * trans)
-        unknown.append(unk)
+        unknown.append(unc)
         unclassified.append(unk)
         total_classified.append(cis + trans + unc)
         total_reads.append(total)
@@ -327,6 +329,8 @@ def get_position_classifications(bam_location, truth_h1_ids, truth_h2_ids, args,
 def main(args = None):
     # get our arguments
     args = parse_args() if args is None else parse_args(args)
+
+    # # for "professional" plots
     # if args.output_name is not None or args.output_name_bam is not None:
     #     plt.style.use('ggplot')
     #     plt.rcParams.update({'font.size': 8})
@@ -334,16 +338,16 @@ def main(args = None):
     #     plt.switch_backend('agg')
 
     # get figure name
-    fig_name = args.output_name
-    if fig_name is None and args.output_name_bam:
-        fig_name = os.path.basename(args.input_bam) + (
+    fig_name_base = args.output_name
+    if fig_name_base is None and args.output_name_bam:
+        fig_name_base = os.path.basename(args.input_bam) + (
             ".natural_switch" if args.only_natural_switch else ("" if args.high_conf_bed is None else ".highconf"))
 
     # update logging
-    if fig_name is not None:
-        global OUTPUT_FILE_NAME
-        OUTPUT_FILE_NAME = fig_name + ".log"
-        with open(OUTPUT_FILE_NAME, 'w') as out:
+    if fig_name_base is not None:
+        global OUTPUT_LOG_FILE_NAME
+        OUTPUT_LOG_FILE_NAME = fig_name_base + ("" if args.region is None else "." + args.region.replace(":", "-")) + ".log"
+        with open(OUTPUT_LOG_FILE_NAME, 'w') as out:
             pass
 
     # get truth reads
@@ -358,21 +362,52 @@ def main(args = None):
     log("Found {} truth H1 reads and {} truth H2 reads".format(len(truth_h1), len(truth_h2)))
 
     # classifiy positions for reads
-    position_classifications = get_position_classifications(args.input_bam, truth_h1, truth_h2, args)
+    position_classifications = dict()
+    if args.region is not None:
+        position_classifications[args.region.replace(":", "-")] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args, args.region)
+    else:
+        # TODO find all contigs in bam, run this for each contig
+        position_classifications[None] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args)
 
+    #TODO needs to be contig/region aware
     highconf_positions = None
     if args.high_conf_bed is not None:
         highconf_positions = get_highconf_positions(args.high_conf_bed, args)
 
+    #TODO needs to be contig/region aware
+    phasesets = None
+    if args.phaseset_bed is not None:
+        phasesets = read_phaseset_bed(args.phaseset_bed)
 
+    for region in sorted(list(position_classifications.keys())):
+        # get region data
+        region_position_classifications = position_classifications[region]
+        # TODO get after making contig/region aware
+        region_phasesets = None
+        region_highconf = None
 
-    phasesets = None if args.phaseset_bed is None else read_phaseset_bed(args.phaseset_bed)
-    if (args.only_natural_switch):
-        plot_only_natural_switch(position_classifications, args, phasesets, fig_name)
-    else:
-        plot_full(position_classifications, args=args, phasesets=phasesets, fig_name=fig_name,
-                title=args.input_bam if args.title is None and args.output_name_bam else args.title,
-                highconf_positions=highconf_positions)
+        # get title
+        if args.title is None:
+            title = os.path.basename(args.input_bam)
+            if region is not None:
+                title = "{}.{}".format(title, region)
+        else:
+            title = args.title
+
+        # get fig name
+        if region is None:
+            fig_name = fig_name_base
+        else:
+            fig_name = "{}.{}".format(fig_name_base, region)
+
+        # for only natural switch
+        if (args.only_natural_switch):
+            plot_only_natural_switch(position_classifications, args, phasesets, fig_name)
+            continue
+
+        # plot it
+        plot_full(region_position_classifications, args=args, phasesets=region_phasesets, fig_name=fig_name,
+                title=title, highconf_positions=region_highconf)
 
 
 
