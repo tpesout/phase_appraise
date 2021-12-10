@@ -124,6 +124,7 @@ def plot_only_natural_switch(classification_data, args, phasesets=None, fig_name
 
 
 def plot_full(classification_data, args, fig_name_base, fig_name=None, phasesets=None, title=None, highconf_positions=None, region=None):
+    log("Generating plots for region {}".format("all" if region is None else region))
     start_idx = min(classification_data.keys())
     end_idx = max(classification_data.keys())
     x = []
@@ -157,6 +158,7 @@ def plot_full(classification_data, args, fig_name_base, fig_name=None, phasesets
         total_reads.append(total)
         curr_correct_ratio = None if cis + trans == 0 else 100 * abs(max(cis, trans) / (cis + trans))
         correct_ratio.append(curr_correct_ratio)
+        curr_correct_ratio_abs = 0.0 if cis + trans + unc == 0 else abs(max(cis, trans) / (cis + trans + unc))
 
         val = IN_CIS if cis > trans else IN_TRANS if trans > cis else None
         switch = False
@@ -171,7 +173,7 @@ def plot_full(classification_data, args, fig_name_base, fig_name=None, phasesets
             contig = "unknown" if region is None else region
             start = i * args.spacing
             end = start + args.spacing
-            record = [contig, start, end, cis, trans, unk, unc, 0 if curr_correct_ratio is None else curr_correct_ratio, switch]
+            record = [contig, start, end, cis, trans, unk, unc, 0 if curr_correct_ratio is None else curr_correct_ratio,curr_correct_ratio_abs ,switch]
             write_global_data(record,fig_name_base)
 
     # get averages
@@ -283,6 +285,7 @@ def get_highconf_positions(bed_file, args):
 
 def get_position_classifications(bam_location, truth_h1_ids, truth_h2_ids, args, region=None, verbose=True):
     # get read phasing pairs
+    log("Reading reads for region {}".format("all" if region is None else region))
     samfile = None
     read_count = 0
     missing_hp_count = 0
@@ -368,7 +371,10 @@ def main(args = None):
 
     # Write header of global data file if option is provided
     if args.global_data:
-        write_global_data(["contig", "start", "end", "cis", "trans", "unk", "unc", "correct_ratio", "switch"], fig_name_base)
+        write_global_data(["##input=".format(args.input_bam)], fig_name_base)
+        write_global_data(["##hap1=".format(args.truth_hap1)], fig_name_base)
+        write_global_data(["##hap2=".format(args.truth_hap2)], fig_name_base)
+        write_global_data(["#contig", "start", "end", "cis", "trans", "unknown", "unclassified", "correct_ratio", "correct_ratio_abs","switch"], fig_name_base)
 
     # get truth reads
     truth_h1 = set()
