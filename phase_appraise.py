@@ -43,6 +43,8 @@ def parse_args(args = None):
                        help='What depth should be used on y axes')
     parser.add_argument('--only_natural_switch', '-N', dest='only_natural_switch', default=False, required=False, action='store_true',
                        help='Only plot the natural switch')
+    parser.add_argument('--global_data', '-G', dest='global_data', default=False, required=False, action='store_true',
+                        help='Output tsv file containing contig, start, end, cis, trans, unk, unc, correct ratio and switch for every bucket ')
 
     return parser.parse_args() if args is None else parser.parse_args(args)
 
@@ -54,6 +56,13 @@ def log(msg):
         with open(OUTPUT_LOG_FILE_NAME, 'a') as out:
             print(msg, file=out)
 
+def write_global_data(msg, fig_name_base):
+    '''
+    Writes a list of strings (msg) as tab-separated values global data tsv file
+    '''
+    filename= fig_name_base+"_global_data.tsv"
+    with open(filename, 'a') as out:
+        print(*msg, file=out, sep='\t', end='\n')
 
 def smooth_values(values,size=5,should_sum=False):
     new_values = []
@@ -114,8 +123,7 @@ def plot_only_natural_switch(classification_data, args, phasesets=None, fig_name
 
 
 
-def plot_full(classification_data, args, fig_name=None, phasesets=None, title=None, highconf_positions=None, region=None):
-
+def plot_full(classification_data, args, fig_name_base, fig_name=None, phasesets=None, title=None, highconf_positions=None, region=None):
     start_idx = min(classification_data.keys())
     end_idx = max(classification_data.keys())
     x = []
@@ -147,8 +155,8 @@ def plot_full(classification_data, args, fig_name=None, phasesets=None, title=No
         unclassified.append(unk)
         total_classified.append(cis + trans + unc)
         total_reads.append(total)
-        correct_ratio = None if cis + trans == 0 else 100*abs(max(cis,trans)/(cis + trans))
-        correct_ratio.append(correct_ratio)
+        curr_correct_ratio = None if cis + trans == 0 else 100 * abs(max(cis, trans) / (cis + trans))
+        correct_ratio.append(curr_correct_ratio)
 
         val = IN_CIS if cis > trans else IN_TRANS if trans > cis else None
         switch = False
@@ -158,15 +166,13 @@ def plot_full(classification_data, args, fig_name=None, phasesets=None, title=No
                 switch = True
             prev_val = val
 
-        #TODO
-        # write output file, I think bed format is good
-        contig = "unknown" if region is None else region.split("-")[0]
-        start = i * args.spacing
-        end = start + args.spacing
-        record = [contig, start, end, cis, trans, unk, unc, 0 if correct_ratio is None else correct_ratio, switch]
-        # I'm not sure if this will work but I think it's a good start
-        # write record to some global output file initialized like the log file
-        # there should probably be an argument to control whether this is written.. I suppose not writing by default is best?
+        # Write record to global data file if requested
+        if args.global_data:
+            contig = "unknown" if region is None else region
+            start = i * args.spacing
+            end = start + args.spacing
+            record = [contig, start, end, cis, trans, unk, unc, 0 if curr_correct_ratio is None else curr_correct_ratio, switch]
+            write_global_data(record,fig_name_base)
 
     # get averages
     avg_unknown = np.mean(list(map(lambda y: y[1], filter(lambda x: x[0] != 0, zip(total_reads, unknown)))))
@@ -323,7 +329,7 @@ def get_position_classifications(bam_location, truth_h1_ids, truth_h2_ids, args,
     if verbose:
         log("Classified Read Lengths{}:".format("" if region is None else " for {}".format(region)))
         log("\tmean:   {}".format(np.mean(analyzed_lengths)))
-        log("\tmedain: {}".format(np.median(analyzed_lengths)))
+        log("\tmedian: {}".format(np.median(analyzed_lengths)))
         analyzed_lengths.sort()
         len_total = sum(analyzed_lengths)
         len_curr = 0
@@ -360,6 +366,10 @@ def main(args = None):
         with open(OUTPUT_LOG_FILE_NAME, 'w') as out:
             pass
 
+    # Write header of global data file if option is provided
+    if args.global_data:
+        write_global_data(["contig", "start", "end", "cis", "trans", "unk", "unc", "correct_ratio", "switch"], fig_name_base)
+
     # get truth reads
     truth_h1 = set()
     truth_h2 = set()
@@ -371,13 +381,21 @@ def main(args = None):
             truth_h2.add(line.split(',')[0].strip())
     log("Found {} truth H1 reads and {} truth H2 reads".format(len(truth_h1), len(truth_h2)))
 
-    # classifiy positions for reads
+    # classify positions for reads
     position_classifications = dict()
+
+    # case of user selecting only one contig
     if args.region is not None:
         position_classifications[args.region.replace(":", "-")] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args, args.region)
+    # case of using all contigs in bam
     else:
-        # TODO find all contigs in bam, run this for each contig
-        position_classifications[None] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args)
+        # find all contigs in bam
+        samfile = pysam.AlignmentFile(args.input_bam, 'rb' if args.input_bam.endswith("bam") else 'r')
+        contigs=samfile.references
+        samfile.close()
+        # get position classifications for every contig - triply nested dict
+        for region in contigs:
+            position_classifications[region] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args)
 
     #TODO needs to be contig/region aware
     highconf_positions = None
@@ -416,12 +434,8 @@ def main(args = None):
             continue
 
         # plot it
-        plot_full(region_position_classifications, args=args, phasesets=region_phasesets, fig_name=fig_name,
-                title=title, highconf_positions=region_highconf)
-
-
-
-
+        plot_full(region_position_classifications, args, fig_name_base, fig_name=fig_name, phasesets=region_phasesets,
+                title=title, highconf_positions=region_highconf, region=region)
 
 if __name__ == "__main__":
     main()
