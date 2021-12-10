@@ -401,7 +401,7 @@ def main(args = None):
         samfile.close()
         # get position classifications for every contig - triply nested dict
         for region in contigs:
-            position_classifications[region] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args)
+            position_classifications[region] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args, region=region)
 
     #TODO needs to be contig/region aware
     highconf_positions = None
