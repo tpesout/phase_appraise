@@ -45,6 +45,9 @@ def parse_args(args = None):
                        help='Only plot the natural switch')
     parser.add_argument('--global_data', '-G', dest='global_data', default=False, required=False, action='store_true',
                         help='Output tsv file containing contig, start, end, cis, trans, unk, unc, correct ratio and switch for every bucket ')
+    parser.add_argument('--global_data', '-G', dest='global_data', default=False, required=False, action='store_true',
+                        help='Output tsv file containing contig, start, end, cis, trans, unk, unc, correct ratio and switch for every bucket ')
+    parser.add_argument('--include_decoy', default=False, action="store_true", required=False)
 
     return parser.parse_args() if args is None else parser.parse_args(args)
 
@@ -191,7 +194,7 @@ def plot_full(classification_data, args, fig_name_base, fig_name=None, phasesets
     # switches
     switch_count = len(switches)
     total_evaluated_buckets = len(list(filter(lambda x: x is not None, correct_ratio)))
-    switch_error_rate = 1.0 * switch_count / total_evaluated_buckets
+    switch_error_rate = (1.0 * switch_count / total_evaluated_buckets) if total_evaluated_buckets > 0 else 0
 
     # get plots
     fig, ((ax1, ax2, ax3)) = plt.subplots(nrows=3,ncols=1,sharex='all',gridspec_kw={'height_ratios': [2, 1, 1]})
@@ -401,6 +404,9 @@ def main(args = None):
         samfile.close()
         # get position classifications for every contig - triply nested dict
         for region in contigs:
+            if "_" in region and not args.include_decoy and args.region is None: # omit decoys
+                continue
+
             position_classifications[region] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args, region=region)
 
     #TODO needs to be contig/region aware
@@ -437,6 +443,14 @@ def main(args = None):
         # for only natural switch
         if (args.only_natural_switch):
             plot_only_natural_switch(position_classifications, args, phasesets, fig_name)
+            continue
+
+        # skip contigs with zero data
+        start_idx = min(region_position_classifications.keys())
+        end_idx = max(region_position_classifications.keys())
+        total_reads=sum([sum(region_position_classifications[i].values) for i in range(start_idx, end_idx + 1)])
+        if total_reads == 0:
+            log("Skipping plot for contig {}. No data found".format(region))
             continue
 
         # plot it
