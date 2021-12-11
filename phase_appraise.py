@@ -404,7 +404,6 @@ def main(args = None):
         for region in contigs:
             if "_" in region and not args.include_decoy and args.region is None: # omit decoys
                 continue
-
             position_classifications[region] = get_position_classifications(args.input_bam, truth_h1, truth_h2, args, region=region)
 
     #TODO needs to be contig/region aware
@@ -446,7 +445,7 @@ def main(args = None):
         # skip contigs with zero data
         start_idx = min(region_position_classifications.keys())
         end_idx = max(region_position_classifications.keys())
-        total_reads=sum([sum(region_position_classifications[i].values) for i in range(start_idx, end_idx + 1)])
+        total_reads=sum([sum(region_position_classifications[i].values()) for i in range(start_idx, end_idx + 1)])
         if total_reads == 0:
             log("Skipping plot for contig {}. No data found".format(region))
             continue
