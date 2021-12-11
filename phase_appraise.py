@@ -44,9 +44,7 @@ def parse_args(args = None):
     parser.add_argument('--only_natural_switch', '-N', dest='only_natural_switch', default=False, required=False, action='store_true',
                        help='Only plot the natural switch')
     parser.add_argument('--global_data', '-G', dest='global_data', default=False, required=False, action='store_true',
-                        help='Output tsv file containing contig, start, end, cis, trans, unk, unc, correct ratio and switch for every bucket ')
-    parser.add_argument('--global_data', '-G', dest='global_data', default=False, required=False, action='store_true',
-                        help='Output tsv file containing contig, start, end, cis, trans, unk, unc, correct ratio and switch for every bucket ')
+                        help='Output tsv file containing contig, start, end, cis, trans, unknown, unclassified, correct ratio, correct_ratio_abs and switch for every bucket ')
     parser.add_argument('--include_decoy', default=False, action="store_true", required=False)
 
     return parser.parse_args() if args is None else parser.parse_args(args)
